@@ -41,9 +41,10 @@ temp/
 tmp/
 *.tmp
 
-# 3D查看器离线库（约32MB，需要时手动下载）
-static/libs/three/
-static/libs/opencascade/
+# 3D查看器离线库（必需文件，不能过滤）
+# static/libs/three/  # 已移除：这些文件是3D查看器必需的
+# static/libs/opencascade/  # 已移除：这些文件是3D查看器必需的
+# 只过滤下载时的临时压缩文件
 static/libs/*.tar.gz
 static/libs/*.tgz
 

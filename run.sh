@@ -23,30 +23,30 @@ echo -e "${NC}"
 # 切换到deploy目录
 cd "$SCRIPT_DIR"
 
-# 激活虚拟环境dgl
-echo -e "${YELLOW}[1/5] 激活虚拟环境dgl...${NC}"
-if [ -n "$CONDA_DEFAULT_ENV" ] && [ "$CONDA_DEFAULT_ENV" = "dgl" ]; then
-    echo -e "${GREEN}✓ 已在dgl环境中${NC}"
+# 激活虚拟环境deploy
+echo -e "${YELLOW}[1/5] 激活虚拟环境deploy...${NC}"
+if [ -n "$CONDA_DEFAULT_ENV" ] && [ "$CONDA_DEFAULT_ENV" = "deploy" ]; then
+    echo -e "${GREEN}✓ 已在deploy环境中${NC}"
 elif command -v conda &> /dev/null; then
     # 尝试使用conda激活
-    if conda env list | grep -q "^dgl "; then
-        echo -e "${GREEN}激活conda环境: dgl${NC}"
+    if conda env list | grep -q "^deploy "; then
+        echo -e "${GREEN}激活conda环境: deploy${NC}"
         eval "$(conda shell.bash hook)"
-        conda activate dgl
-        echo -e "${GREEN}✓ conda环境dgl已激活${NC}"
+        conda activate deploy
+        echo -e "${GREEN}✓ conda环境deploy已激活${NC}"
     else
-        echo -e "${YELLOW}⚠ 未找到conda环境dgl，尝试其他方式...${NC}"
+        echo -e "${YELLOW}⚠ 未找到conda环境deploy，尝试其他方式...${NC}"
         # 尝试查找并激活虚拟环境
-        if [ -f "$HOME/anaconda3/envs/dgl/bin/activate" ] || [ -f "$HOME/miniconda3/envs/dgl/bin/activate" ]; then
-            ENV_PATH=$(find "$HOME" -name "activate" -path "*/envs/dgl/bin/activate" 2>/dev/null | head -1)
+        if [ -f "$HOME/anaconda3/envs/deploy/bin/activate" ] || [ -f "$HOME/miniconda3/envs/deploy/bin/activate" ]; then
+            ENV_PATH=$(find "$HOME" -name "activate" -path "*/envs/deploy/bin/activate" 2>/dev/null | head -1)
             if [ -n "$ENV_PATH" ]; then
                 source "$ENV_PATH"
-                echo -e "${GREEN}✓ 虚拟环境dgl已激活${NC}"
+                echo -e "${GREEN}✓ 虚拟环境deploy已激活${NC}"
             else
-                echo -e "${YELLOW}⚠ 无法自动激活dgl环境，请手动激活后运行此脚本${NC}"
+                echo -e "${YELLOW}⚠ 无法自动激活deploy环境，请手动激活后运行此脚本${NC}"
             fi
         else
-            echo -e "${YELLOW}⚠ 无法找到dgl环境，请确保已创建并激活dgl虚拟环境${NC}"
+            echo -e "${YELLOW}⚠ 无法找到deploy环境，请确保已创建并激活deploy虚拟环境${NC}"
         fi
     fi
 else
@@ -57,10 +57,10 @@ else
     else
         echo -e "${YELLOW}⚠ 未找到conda，尝试查找其他虚拟环境...${NC}"
         # 尝试查找常见的虚拟环境路径
-        for env_path in "$HOME/anaconda3/envs/dgl" "$HOME/miniconda3/envs/dgl" "/opt/conda/envs/dgl"; do
+        for env_path in "$HOME/anaconda3/envs/deploy" "$HOME/miniconda3/envs/deploy" "/opt/conda/envs/deploy"; do
             if [ -d "$env_path" ] && [ -f "$env_path/bin/activate" ]; then
                 source "$env_path/bin/activate"
-                echo -e "${GREEN}✓ 虚拟环境dgl已激活 (路径: $env_path)${NC}"
+                echo -e "${GREEN}✓ 虚拟环境deploy已激活 (路径: $env_path)${NC}"
                 break
             fi
         done

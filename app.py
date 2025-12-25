@@ -186,7 +186,7 @@ def main():
     parser.add_argument("--config", type=str, default="config.yaml", help="配置文件路径")
     parser.add_argument("--port", type=int, default=7860, help="服务端口")
     parser.add_argument("--share", action="store_true", help="生成公网链接")
-    parser.add_argument("--device", type=str, default="cuda", choices=["cpu", "cuda"], help="推理设备")
+    parser.add_argument("--device", type=str, default="cpu", choices=["cpu", "cuda"], help="推理设备")
     
     args = parser.parse_args()
     
