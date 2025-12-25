@@ -10,7 +10,10 @@
 - 批量处理支持
 
 启动方式：
-    python -m deploy.app --config deploy/config.yaml
+    cd /root/workspace/deploy
+    python app.py --config config.yaml
+    或使用启动脚本：
+    ./run.sh
 """
 
 import sys
@@ -21,8 +24,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
-# 添加项目根目录到路径
-project_root = Path(__file__).parent.parent
+# 添加项目根目录到路径 (deploy目录)
+project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 from config import DeployConfig, DEFAULT_CONFIG
