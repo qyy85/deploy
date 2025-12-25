@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D STEP Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+            background: linear-gradient(135deg, #1e293b 0%, #1a2332 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        
+        #viewer-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+        }
+        
+        #loading {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #1e293b 0%, #1a2332 100%);
+            z-index: 10;
+        }
+        
+        #loading.hidden {
+            display: none;
+        }
+        
+        .loading-content {
+            text-align: center;
+            color: #cbd5e1;
+        }
+        
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 3px solid #475569;
+            border-top-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        #controls-hint {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: #cbd5e1;
+            font-size: 0.8rem;
+            background: rgba(30, 41, 59, 0.9);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            backdrop-filter: blur(8px);
+            z-index: 5;
+        }
+        
+        #error-message {
+            display: none;
+            position: absolute;
+            inset: 0;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: #ff4d4f;
+            padding: 2rem;
+            z-index: 20;
+        }
+        
+        #error-message.show {
+            display: flex;
+        }
+        
+        .error-icon {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="viewer-container">
+        <!-- 加载状态 -->
+        <div id="loading">
+            <div class="loading-content">
+                <div class="spinner"></div>
+                <p id="loading-text" style="margin-top: 1rem;">正在加载3D引擎...</p>
+            </div>
+        </div>
+        
+        <!-- 错误消息 -->
+        <div id="error-message">
+            <div>
+                <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="15" y1="9" x2="9" y2="15"/>
+                    <line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+                <p style="margin-top: 1rem;">❌ 加载失败</p>
+                <p id="error-text" style="font-size: 0.9rem; color: #cbd5e1; margin-top: 0.5rem;"></p>
+            </div>
+        </div>
+        
+        <!-- 3D渲染容器 -->
+        <div id="canvas-container"></div>
+        
+        <!-- 控制提示 -->
+        <div id="controls-hint">
+            🖱️ 左键旋转 | 滚轮缩放 | 右键平移
+        </div>
+    </div>
+    
+    <!-- Import Map for module resolution -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "/static/libs/three/three.module.js"
+        }
+    }
+    </script>
+    
+    <script type="module">
+        // 导入Three.js和相关模块
+        import * as THREE from 'three';
+        import { OrbitControls } from '/static/libs/three/jsm/controls/OrbitControls.js';
+        
+        // 从URL参数获取文件ID
+        const urlParams = new URLSearchParams(window.location.search);
+        const fileId = urlParams.get('file');
+        
+        const loadingElement = document.getElementById('loading');
+        const loadingText = document.getElementById('loading-text');
+        const errorElement = document.getElementById('error-message');
+        const errorText = document.getElementById('error-text');
+        const container = document.getElementById('canvas-container');
+        
+        function updateLoading(text) {
+            loadingText.textContent = text;
+        }
+        
+        function showError(message) {
+            loadingElement.classList.add('hidden');
+            errorText.textContent = message;
+            errorElement.classList.add('show');
+        }
+        
+        if (!fileId) {
+            showError('未指定文件ID');
+            throw new Error('No file ID specified');
+        }
+        
+        async function loadViewer() {
+            try {
+                // 加载OpenCascade
+                updateLoading('初始化OpenCascade...');
+                const { default: initOpenCascade } = await import('/static/libs/opencascade/opencascade.wasm.js');
+                
+                // 配置WASM文件路径
+                const oc = await initOpenCascade({
+                    locateFile: (path) => {
+                        if (path.endsWith('.wasm')) {
+                            return '/static/libs/opencascade/' + path;
+                        }
+                        return path;
+                    }
+                });
+                
+                // 获取STEP文件内容
+                updateLoading('加载STEP文件...');
+                const response = await fetch(`/api/step-content/${fileId}`);
+                if (!response.ok) {
+                    throw new Error(`无法加载文件: ${response.statusText}`);
+                }
+                const stepContent = await response.text();
+                
+                // 解析STEP文件
+                updateLoading('解析STEP文件...');
+                oc.FS.createDataFile("/", "model.step", stepContent, true, true);
+                
+                const reader = new oc.STEPControl_Reader_1();
+                const readResult = reader.ReadFile("model.step");
+                
+                if (readResult !== oc.IFSelect_ReturnStatus.IFSelect_RetDone) {
+                    throw new Error('无法解析STEP文件');
+                }
+                
+                // 转移根形状（不需要进度范围参数或使用空参数）
+                const transferResult = reader.TransferRoots();
+                if (transferResult <= 0) {
+                    throw new Error('无法转换STEP数据');
+                }
+                
+                const shape = reader.OneShape();
+                
+                // 三角剖分
+                updateLoading('生成三角网格...');
+                new oc.BRepMesh_IncrementalMesh_2(shape, 0.1, false, 0.5, false);
+                
+                // 提取几何数据
+                const facelist = [];
+                const ExpFace = new oc.TopExp_Explorer_1();
+                
+                for (ExpFace.Init(shape, oc.TopAbs_ShapeEnum.TopAbs_FACE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE); 
+                     ExpFace.More(); 
+                     ExpFace.Next()) {
+                    
+                    const myFace = oc.TopoDS.Face_1(ExpFace.Current());
+                    const aLocation = new oc.TopLoc_Location_1();
+                    const myT = oc.BRep_Tool.Triangulation(myFace, aLocation);
+                    
+                    if (myT.IsNull()) continue;
+                    
+                    const triangulation = myT.get();
+                    const vertices = [];
+                    
+                    // 提取顶点
+                    for (let i = 1; i <= triangulation.NbNodes(); i++) {
+                        const p = triangulation.Node(i).Transformed(aLocation.Transformation());
+                        vertices.push(new THREE.Vector3(p.X(), p.Y(), p.Z()));
+                    }
+                    
+                    // 提取三角形
+                    const triangles = myT.get().Triangles();
+                    const indices = [];
+                    const orient = myFace.Orientation_1();
+                    
+                    for (let nt = 1; nt <= triangulation.NbTriangles(); nt++) {
+                        const t = triangles.Value(nt);
+                        let n1 = t.Value(1) - 1;
+                        let n2 = t.Value(2) - 1;
+                        let n3 = t.Value(3) - 1;
+                        
+                        if (orient !== oc.TopAbs_Orientation.TopAbs_FORWARD) {
+                            [n1, n2] = [n2, n1];
+                        }
+                        
+                        indices.push(n1, n2, n3);
+                    }
+                    
+                    facelist.push({ vertices, indices });
+                }
+                
+                // 清理虚拟文件系统
+                oc.FS.unlink("/model.step");
+                
+                // 创建Three.js场景
+                updateLoading('创建3D场景...');
+                
+                const scene = new THREE.Scene();
+                scene.background = new THREE.Color(0xcbd5e1); // 中灰色，与深色主题协调
+                
+                const camera = new THREE.PerspectiveCamera(
+                    75,
+                    container.clientWidth / container.clientHeight,
+                    0.1,
+                    10000
+                );
+                
+                const renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(container.clientWidth, container.clientHeight);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                container.appendChild(renderer.domElement);
+                
+                // 添加控制器
+                const controls = new OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.dampingFactor = 0.05;
+                
+                // 添加光照
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                scene.add(ambientLight);
+                
+                const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight1.position.set(100, 100, 100);
+                scene.add(directionalLight1);
+                
+                const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
+                directionalLight2.position.set(-100, -100, -100);
+                scene.add(directionalLight2);
+                
+                // 创建网格
+                const geometry = new THREE.BufferGeometry();
+                const allVertices = [];
+                const allIndices = [];
+                let vertexOffset = 0;
+                
+                facelist.forEach(face => {
+                    face.vertices.forEach(v => {
+                        allVertices.push(v.x, v.y, v.z);
+                    });
+                    
+                    face.indices.forEach(i => {
+                        allIndices.push(i + vertexOffset);
+                    });
+                    
+                    vertexOffset += face.vertices.length;
+                });
+                
+                geometry.setAttribute('position', new THREE.Float32BufferAttribute(allVertices, 3));
+                geometry.setIndex(allIndices);
+                geometry.computeVertexNormals();
+                
+                const material = new THREE.MeshStandardMaterial({
+                    color: 0x1890ff,
+                    metalness: 0.3,
+                    roughness: 0.7,
+                    side: THREE.DoubleSide
+                });
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                scene.add(mesh);
+                
+                // 添加线框
+                const edges = new THREE.EdgesGeometry(geometry);
+                const line = new THREE.LineSegments(
+                    edges,
+                    new THREE.LineBasicMaterial({ color: 0x40a9ff, opacity: 0.3, transparent: true })
+                );
+                scene.add(line);
+                
+                // 自动调整相机
+                geometry.computeBoundingBox();
+                const bbox = geometry.boundingBox;
+                const center = new THREE.Vector3();
+                bbox.getCenter(center);
+                
+                const size = new THREE.Vector3();
+                bbox.getSize(size);
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const distance = maxDim * 2;
+                
+                camera.position.set(center.x + distance, center.y + distance, center.z + distance);
+                controls.target.copy(center);
+                controls.update();
+                
+                // 隐藏加载界面
+                loadingElement.classList.add('hidden');
+                
+                // 动画循环
+                function animate() {
+                    requestAnimationFrame(animate);
+                    controls.update();
+                    renderer.render(scene, camera);
+                }
+                animate();
+                
+                // 响应窗口大小变化
+                window.addEventListener('resize', () => {
+                    const width = container.clientWidth;
+                    const height = container.clientHeight;
+                    camera.aspect = width / height;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(width, height);
+                });
+                
+            } catch (error) {
+                console.error('3D查看器错误:', error);
+                showError(error.message);
+            }
+        }
+        
+        // 启动加载
+        loadViewer();
+    </script>
+</body>
+</html>
+

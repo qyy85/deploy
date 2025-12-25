@@ -1,0 +1,10 @@
+# PyTorch模型存放目录
+# 
+# 导出的模型文件：
+# - model.pt : 完整模型（编码器+分类器）
+#
+# 导出命令：
+#   python -m deploy.core.exporter \
+#     --checkpoint experiments/classification/xxx/best_classifier.ckpt \
+#     --output deploy/models/
+

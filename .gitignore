@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# 虚拟环境
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 模型文件
+models/*.pt
+models/*.ckpt
+!models/.gitkeep
+
+# 数据文件
+data/
+*.step
+*.stp
+*.STEP
+*.STP
+
+# 日志
+*.log
+logs/
+
+# 临时文件
+temp/
+tmp/
+*.tmp
+
+# 3D查看器离线库（约32MB，需要时手动下载）
+static/libs/three/
+static/libs/opencascade/
+static/libs/*.tar.gz
+static/libs/*.tgz
+
+# Gradio缓存
+gradio_cached_examples/
+flagged/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
