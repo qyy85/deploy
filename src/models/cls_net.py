@@ -61,3 +61,21 @@ class ClassifyNet(nn.Module):
         # 输出层：分类决策（无激活函数，输出logits）
         logits = self.linear4(x)
         return logits
+    
+    def get_penultimate_features(self, x):
+        """
+        获取倒数第二层特征（在linear4之前）
+        
+        Args:
+            x: 输入特征 [batch_size, input_dim]
+            
+        Returns:
+            倒数第二层特征 [batch_size, input_dim]
+        """
+        x_norm = self.layer_norm1(x)
+        x_attended = x_norm
+        x = self.linear1(x_attended)
+        x = self.bn1(x)
+        x = F.relu(x, inplace=True)
+        x = self.dp1(x)
+        return x

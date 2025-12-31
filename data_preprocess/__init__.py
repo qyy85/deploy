@@ -1,10 +1,6 @@
-# -*- coding: utf-8 -*-
-"""
-数据预处理模块
-包含图构建、特征提取等功能
-"""
-
 from .graph_builder import GraphBuilder
+from .node import Node, NodeFactory
+from .edge import Edge, EdgeFactory
+from .graph import HeterogeneousGraph
 
-__all__ = ['GraphBuilder']
-
+__all__ = ['GraphBuilder', 'Node', 'Edge', 'HeterogeneousGraph', 'NodeFactory', 'EdgeFactory']

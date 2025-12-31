@@ -54,5 +54,18 @@ ui:
   server_port: 5001
   share: false  # 是否生成公网链接
 
+# 向量数据库配置
+vector_db:
+  db_type: "milvus"  # 向量数据库类型
+  host: "192.168.30.132"
+  port: 19530
+  database_name: "model_feat_rs"  # 数据库名称（独立存储库）
+  collection_name: "feat"   # 集合名称（相当于数据库中的表）
+  vector_dim: 256  # 特征向量维度
+  index_type: "IVF_FLAT"  # 索引类型
+  metric_type: "L2"  # 距离度量类型
+  nlist: 128  # 聚类中心数量
+  nprobe: 16  # 搜索时探测的聚类数量
+
 # 临时文件目录
 temp_dir: "/tmp/brep_deploy"

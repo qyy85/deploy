@@ -1,0 +1,45 @@
+接口：推送零件清单
+接口名：pushPartsList
+入参格式：
+{
+    "type": "KMCLOUD",
+    "vector_lib": "向量库名称",
+    "data": {
+        "part_list": [
+            {
+                "part_id":123,
+                "part_cls_id":123,
+                "part_name":"",
+                "part_code":"",
+                "part_version":"",
+                "model_info": {
+                    "model_file_name": "part_model_1234567890.part",
+                    "model_type":"part_model",
+                    "model_url": "http://XXXIP:8080/part_model/1234567890"
+                }
+            },
+            {
+                "part_id":123,
+                "part_cls_id":123,
+                "part_name":"",
+                "part_code":"",
+                "part_version":"",
+                "model_info": {
+                    "model_file_name": "part_model_1234567890.part",
+                    "model_type":"part_model",
+                    "model_url": "http://XXXIP:8080/part_model/1234567890"
+                }
+            }
+        ]
+    }
+}
+
+返回值格式：
+{
+    "type": "KMAI",
+    "vector_lib": "向量库名称",
+    "data": {
+        "batch_number": "asd",
+        "successed": true
+    }
+}

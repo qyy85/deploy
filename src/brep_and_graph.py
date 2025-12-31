@@ -1,26 +1,152 @@
 """
 BREP图数据集模块
 
-BREPGraphDataset: 从STEP文件列表构建图数据集，可直接用于DataLoader
+BREPGraphDataset: 从XML文件列表构建图数据集，可直接用于DataLoader
 """
 
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union, Callable
-from data_preprocess.batch_graph_generator import process_step_to_graph
+from data_preprocess import GraphBuilder
 import torch
 from torch.utils.data import Dataset
 from torch import FloatTensor
 import dgl
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+
+def process_xml_to_graph(xml_path: str) -> Tuple[Optional[dgl.DGLGraph], Dict]:
+    """
+    处理单个 XML 文件，返回 DGL 图和元数据
+    
+    Args:
+        xml_path: XML 文件路径
+        
+    Returns:
+        (dgl_graph, metadata): DGL 图和元数据字典
+    """
+    xml_file = Path(xml_path)
+    
+    if not xml_file.exists():
+        return None, {
+            "source_file": str(xml_path),
+            "file_name": xml_file.name,
+            "status": "error",
+            "error": f"文件不存在: {xml_path}"
+        }
+    
+    try:
+        # 读取 XML 文件内容
+        with open(xml_file, 'r', encoding='utf-8') as f:
+            xml_content = f.read()
+        
+        # 使用 GraphBuilder 从 XML 构建图
+        graph_builder = GraphBuilder()
+        hetero_graph = graph_builder.from_xml(xml_content)
+        dgl_graph = hetero_graph.build_dgl_graph()
+        
+        metadata = {
+            "source_file": str(xml_file),
+            "file_name": xml_file.name,
+            "status": "success",
+            "num_nodes": sum(dgl_graph.num_nodes(ntype) for ntype in dgl_graph.ntypes),
+            "num_edges": sum(dgl_graph.num_edges(etype) for etype in dgl_graph.canonical_etypes),
+            "node_types": list(dgl_graph.ntypes),
+            "edge_types": [et[1] for et in dgl_graph.canonical_etypes],
+        }
+        
+        return dgl_graph, metadata
+        
+    except Exception as e:
+        return None, {
+            "source_file": str(xml_path),
+            "file_name": xml_file.name,
+            "status": "error",
+            "error": str(e)
+        }
+
+
+def process_xml_files_batch(
+    file_paths: List[str], 
+    max_workers: int = 4,
+    show_progress: bool = True,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None
+) -> List[Tuple[Optional[dgl.DGLGraph], Dict]]:
+    """
+    批量处理 XML 文件列表
+    
+    Args:
+        file_paths: XML 文件路径列表
+        max_workers: 最大并行进程数
+        show_progress: 是否显示进度条
+        progress_callback: 进度回调函数，接收 (current, total, message) 参数
+        
+    Returns:
+        [(dgl_graph, metadata), ...]: 结果列表，顺序与输入一致
+    """
+    if not file_paths:
+        return []
+    
+    # 单文件直接处理
+    if len(file_paths) == 1:
+        if progress_callback:
+            progress_callback(0, 1, "开始处理单个文件...")
+        result = process_xml_to_graph(file_paths[0])
+        if progress_callback:
+            progress_callback(1, 1, "处理完成")
+        return [result]
+    
+    # 多文件并行处理
+    results = [None] * len(file_paths)
+    total_files = len(file_paths)
+    completed_count = 0
+    
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        # 提交任务，保留索引
+        future_to_idx = {
+            executor.submit(process_xml_to_graph, path): idx 
+            for idx, path in enumerate(file_paths)
+        }
+        
+        # 创建迭代器
+        futures = as_completed(future_to_idx)
+        if show_progress and not progress_callback:
+            try:
+                from tqdm import tqdm
+                futures = tqdm(futures, total=len(file_paths), desc="处理XML文件")
+            except ImportError:
+                pass
+        
+        # 收集结果
+        for future in futures:
+            idx = future_to_idx[future]
+            try:
+                results[idx] = future.result()
+                completed_count += 1
+                if progress_callback:
+                    file_name = Path(file_paths[idx]).name
+                    progress_callback(completed_count, total_files, f"正在处理: {file_name} ({completed_count}/{total_files})")
+            except Exception as e:
+                results[idx] = (None, {
+                    "source_file": file_paths[idx],
+                    "status": "error",
+                    "error": str(e)
+                })
+                completed_count += 1
+                if progress_callback:
+                    file_name = Path(file_paths[idx]).name
+                    progress_callback(completed_count, total_files, f"处理失败: {file_name} ({completed_count}/{total_files})")
+    
+    return results
 
 
 class BREPGraphDataset(Dataset):
     """
-    BREP图数据集 - 从 STEP 文件构建图
+    BREP图数据集 - 从 XML 文件构建图
     
-    使用多进程批量处理 STEP 文件
+    使用多进程批量处理 XML 文件
     
     用法:
-        dataset = BREPGraphDataset(file_paths=["a.step", "b.stp", "c.STEP"])
+        dataset = BREPGraphDataset(file_paths=["a.xml", "b.xml", "c.xml"])
         dataloader = DataLoader(dataset, batch_size=4, collate_fn=dataset.collate_fn)
     """
     
@@ -36,10 +162,10 @@ class BREPGraphDataset(Dataset):
         初始化数据集
         
         Args:
-            file_paths: 文件路径列表（支持 .step, .stp, .STEP）
+            file_paths: 文件路径列表（支持 .xml）
             transform: 数据变换函数
             convert_float32: 是否转换为float32
-            max_workers: STEP文件处理的最大并行进程数
+            max_workers: XML文件处理的最大并行进程数
             progress_callback: 进度回调函数，接收 (current, total, message) 参数
         """
         self.file_paths = [Path(p) for p in file_paths]
@@ -47,10 +173,6 @@ class BREPGraphDataset(Dataset):
         self.convert_float32 = convert_float32
         self.max_workers = max_workers
         self.progress_callback = progress_callback
-        
-        # 初始化批量处理函数
-        self._batch_process_func = None
-        self._init_batch_processor()
         
         # 数据存储
         self.data = []
@@ -61,41 +183,32 @@ class BREPGraphDataset(Dataset):
         self._load_all()
         self.edge_types_dim, self.node_dim = self._compute_dims()
     
-    def _init_batch_processor(self):
-        """初始化批量处理函数"""
-        try:
-            from data_preprocess.batch_graph_generator import process_step_files_batch
-            self._batch_process_func = process_step_files_batch
-            print("✓ 成功加载 STEP 批量处理模块")
-        except ImportError as e:
-            raise ImportError(f"无法导入 STEP 处理模块: {e}")
-    
     def _load_all(self):
-        """加载所有STEP文件（多进程批量处理）"""
-        # 过滤有效的 STEP 文件
-        step_files = []
+        """加载所有XML文件（多进程批量处理）"""
+        # 过滤有效的 XML 文件
+        xml_files = []
         for fp in self.file_paths:
             suffix = fp.suffix.lower()
-            if suffix in ['.step', '.stp']:
-                step_files.append(fp)
+            if suffix == '.xml':
+                xml_files.append(fp)
             else:
                 print(f"⚠ 不支持的文件格式，跳过: {fp}")
         
-        if not step_files:
-            print("⚠ 没有有效的STEP文件")
+        if not xml_files:
+            print("⚠ 没有有效的XML文件")
             if self.progress_callback:
-                self.progress_callback(0, 0, "没有有效的STEP文件")
+                self.progress_callback(0, 0, "没有有效的XML文件")
             return
         
-        total_files = len(step_files)
-        print(f"📂 批量处理 {total_files} 个STEP文件（{self.max_workers}进程）...")
+        total_files = len(xml_files)
+        print(f"📂 批量处理 {total_files} 个XML文件（{self.max_workers}进程）...")
         
         if self.progress_callback:
             self.progress_callback(0, total_files, f"开始处理 {total_files} 个文件...")
         
         # 调用多进程批量处理，传入进度回调
-        results = self._batch_process_func(
-            [str(fp) for fp in step_files],
+        results = process_xml_files_batch(
+            [str(fp) for fp in xml_files],
             max_workers=self.max_workers,
             show_progress=False,  # 不使用tqdm，使用自定义回调
             progress_callback=self.progress_callback
@@ -103,7 +216,7 @@ class BREPGraphDataset(Dataset):
         
         # 处理结果
         processed_count = 0
-        for idx, ((graph, metadata), file_path) in enumerate(zip(results, step_files)):
+        for idx, ((graph, metadata), file_path) in enumerate(zip(results, xml_files)):
             if graph is None:
                 if self.progress_callback:
                     self.progress_callback(idx + 1, total_files, f"跳过无效文件: {file_path.name}")
@@ -217,10 +330,10 @@ class BREPGraphDataset(Dataset):
 
 def load_single_graph(file_path: Union[str, Path]) -> Tuple[Optional[dgl.DGLGraph], Dict]:
     """
-    加载单个STEP文件的便捷函数
+    加载单个XML文件的便捷函数
     
     Args:
-        file_path: STEP文件路径（.step, .stp, .STEP）
+        file_path: XML文件路径（.xml）
         
     Returns:
         (graph, metadata): DGL图和元数据
@@ -239,13 +352,13 @@ def load_single_graph(file_path: Union[str, Path]) -> Tuple[Optional[dgl.DGLGrap
         metadata["error"] = f"文件不存在: {file_path}"
         return None, metadata
     
-    if suffix not in ['.step', '.stp']:
+    if suffix != '.xml':
         metadata["status"] = "error"
-        metadata["error"] = f"不支持的文件格式: {suffix}，仅支持 .step, .stp, .STEP"
+        metadata["error"] = f"不支持的文件格式: {suffix}，仅支持 .xml"
         return None, metadata
     
     try:
-        graph, meta = process_step_to_graph(str(file_path))
+        graph, meta = process_xml_to_graph(str(file_path))
         metadata.update(meta)
         return graph, metadata
     except Exception as e:

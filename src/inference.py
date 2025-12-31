@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 import dgl
 
 # 添加项目根目录到路径，确保能找到 src.models 等模块
@@ -220,6 +221,60 @@ class ModelInference:
             reverse=True
         )
         return sorted_probs[:k]
+    
+    @torch.no_grad()
+    def get_encoder_features(self, graph: dgl.DGLGraph) -> torch.Tensor:
+        """
+        获取encoder后的特征向量
+        
+        Args:
+            graph: DGL异构图
+            
+        Returns:
+            encoder特征向量 [batch_size, graph_emb_dim]
+        """
+        if self.mode != "native":
+            raise NotImplementedError("get_encoder_features 仅支持 native 模式")
+        
+        if not isinstance(self.model, ClassifierWrapper):
+            raise ValueError("模型不是 ClassifierWrapper 类型，无法获取 encoder 特征")
+        
+        # 移动图到设备
+        graph = graph.to(self.device)
+        
+        # 获取encoder特征
+        encoder_features = self.model.encoder(graph)
+        
+        return encoder_features
+    
+    @torch.no_grad()
+    def get_classifier_penultimate_features(self, graph: dgl.DGLGraph) -> torch.Tensor:
+        """
+        获取分类网络倒数第二层的特征向量
+        （即经过linear1、bn1、relu、dp1后的特征，在linear4之前）
+        
+        Args:
+            graph: DGL异构图
+            
+        Returns:
+            分类器倒数第二层特征向量 [batch_size, input_dim]
+        """
+        if self.mode != "native":
+            raise NotImplementedError("get_classifier_penultimate_features 仅支持 native 模式")
+        
+        if not isinstance(self.model, ClassifierWrapper):
+            raise ValueError("模型不是 ClassifierWrapper 类型，无法获取分类器特征")
+        
+        # 移动图到设备
+        graph = graph.to(self.device)
+        
+        # 获取encoder特征
+        encoder_features = self.model.encoder(graph)
+        
+        # 获取分类器倒数第二层特征
+        penultimate_features = self.model.classifier.get_penultimate_features(encoder_features)
+        
+        return penultimate_features
     
     def is_ready(self) -> bool:
         """检查推理引擎是否就绪"""

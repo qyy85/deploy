@@ -64,6 +64,26 @@ class ClassMapping:
         return [self.get_class_name(i) for i in range(len(self.full_class_map))]
 
 
+@dataclass
+class VectorDBConfig:
+    """
+    向量数据库配置
+    
+    注意: 此配置类与 src/vector_db.py 中的 VectorDBConfig 保持同步
+    可通过 src.vector_db.VectorDBConfig.from_deploy_config(config) 转换
+    """
+    db_type: str = "milvus"  # 向量数据库类型
+    host: str = "192.168.30.132"
+    port: int = 19530
+    database_name: str = "model_feat_rs"  # 数据库名称（独立存储库）
+    collection_name: str = "feat"   # 集合名称（相当于数据库中的表）
+    vector_dim: int = 256  # 特征向量维度
+    index_type: str = "IVF_FLAT"  # 索引类型: IVF_FLAT, IVF_SQ8, HNSW
+    metric_type: str = "L2"  # 距离度量: L2, IP (内积), COSINE
+    nlist: int = 128  # 聚类中心数量
+    nprobe: int = 16  # 搜索时探测的聚类数量
+
+
 @dataclass  
 class UIConfig:
     """UI配置"""
@@ -83,6 +103,7 @@ class DeployConfig:
     model: ModelConfig = field(default_factory=ModelConfig)
     class_mapping: ClassMapping = field(default_factory=ClassMapping)
     ui: UIConfig = field(default_factory=UIConfig)
+    vector_db: VectorDBConfig = field(default_factory=VectorDBConfig)
     
     temp_dir: str = "/tmp/brep_deploy"
     
@@ -100,6 +121,8 @@ class DeployConfig:
             config.class_mapping = ClassMapping(**config_dict["class_mapping"])
         if "ui" in config_dict:
             config.ui = UIConfig(**config_dict["ui"])
+        if "vector_db" in config_dict:
+            config.vector_db = VectorDBConfig(**config_dict["vector_db"])
         if "temp_dir" in config_dict:
             config.temp_dir = config_dict["temp_dir"]
             
@@ -129,6 +152,18 @@ class DeployConfig:
                 "max_batch_size": self.ui.max_batch_size,
                 "server_port": self.ui.server_port,
                 "share": self.ui.share,
+            },
+            "vector_db": {
+                "db_type": self.vector_db.db_type,
+                "host": self.vector_db.host,
+                "port": self.vector_db.port,
+                "database_name": self.vector_db.database_name,
+                "collection_name": self.vector_db.collection_name,
+                "vector_dim": self.vector_db.vector_dim,
+                "index_type": self.vector_db.index_type,
+                "metric_type": self.vector_db.metric_type,
+                "nlist": self.vector_db.nlist,
+                "nprobe": self.vector_db.nprobe,
             },
             "temp_dir": self.temp_dir,
         }
